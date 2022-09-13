@@ -1,0 +1,175 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Template to Create an EC2 instance in the Shared Services account and install Jenkins
+   
+Parameters:
+  ImageId:
+    Type: String
+    Description: 'Ubuntu 20.04 AMI for N.Virginia us-east1 Region'
+    Default: 'ami-08d4ac5b634553e16'
+  VpcId:
+    Type: String
+    Description: VPC id
+    Default: vpc-02098852956be6d09
+  SubnetId:
+    Type: String
+    Description: Subnet in which to launch an EC2
+    Default: subnet-00277a405bdda7d9d
+  AvailabilityZone:
+    Type: String
+    Description: Availability Zone into which instance will launch
+    Default: us-east-1a
+  InstanceType:
+    Type: String
+    Description: Choosing instance type t2.medium
+    Default: t2.medium
+  KeyName:
+    Type: String
+    Description: SSH Keypair to login to the instance
+    Default: MyMacKey
+  
+  #Tags
+  Owner:
+    Type: String
+    Default: 'ezhanybaiuulu'
+
+  Contact:
+    Type: String
+    Default: 'ezhanybaiuulu@akumoproject.com'
+
+  ProjectName:
+    Type: String
+    Default: 'AkumoProject3'
+
+  ProjectEnvironment:
+    Type: String
+    Default: 'shs'
+
+  ProjectTeam:
+    Type: String
+    Default: 'DevOps'
+
+Resources:
+  ElasticIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      InstanceId: !Ref EC2Instance
+      Tags:
+        - Key: Name
+          Value: 'ak3cf-shs-ue1-eip-001-jenkins'
+        - Key: OwnerID
+          Value: !Ref Owner
+        - Key: OwnerContact
+          Value: !Ref Contact
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref ProjectEnvironment
+        - Key: Team
+          Value: !Ref ProjectTeam
+  EC2Instance:
+    Type: 'AWS::EC2::Instance'
+    Properties: 
+      ImageId: !Ref ImageId
+      InstanceType: !Ref InstanceType
+      AvailabilityZone: !Ref AvailabilityZone
+      KeyName: !Ref KeyName
+      SecurityGroupIds: 
+        - !Ref SecurityGroup
+      SubnetId: !Ref SubnetId
+      Tags:
+        - Key: Name
+          Value: 'ak3cf-shs-ue1-ec2-001-jenkins'
+        - Key: OwnerID
+          Value: !Ref Owner
+        - Key: OwnerContact
+          Value: !Ref Contact
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref ProjectEnvironment
+        - Key: Team
+          Value: !Ref ProjectTeam
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash -xe
+          sudo apt-get update -y
+          sudo apt-get install openjdk-11-jdk-headless -y
+          wget -q -O - https://pkg.jenkins.io/debian-stable/jenkins.io.key | sudo apt-key add -
+          sudo sh -c 'echo deb http://pkg.jenkins.io/debian-stable binary/ > /etc/apt/sources.list.d/jenkins.list'
+          sudo apt update && sudo apt upgrade -y
+          sudo apt install default-jre -y
+          sudo apt install jenkins -y
+          sudo systemctl enable jenkins
+          sudo systemctl start jenkins
+  EBSVolume:
+    Type: AWS::EC2::Volume
+    Properties: 
+      Size: 20
+      VolumeType: gp3
+      AvailabilityZone: !GetAtt EC2Instance.AvailabilityZone
+      Tags:
+        - Key: Name
+          Value: 'ak3cf-shs-ue1-ebs-001-jenkins'
+        - Key: OwnerID
+          Value: !Ref Owner
+        - Key: OwnerContact
+          Value: !Ref Contact
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref ProjectEnvironment
+        - Key: Team
+          Value: !Ref ProjectTeam
+  EBSvolumeAttach:
+    Type: AWS::EC2::VolumeAttachment
+    Properties:
+      InstanceId: !Ref EC2Instance
+      VolumeId: !Ref EBSVolume
+      Device: /dev/sdh
+
+  SecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      VpcId: !Ref VpcId
+      GroupDescription: This security group is used for Jenkins EC2 Instance
+      GroupName: 'ak3-shs-ue1-sg-002-jenkins'
+      SecurityGroupEgress: 
+        - IpProtocol: -1
+          FromPort: -1
+          ToPort: -1
+          CidrIp: 0.0.0.0/0
+      SecurityGroupIngress: 
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 67.162.97.181/32
+      Tags:
+        - Key: Name
+          Value: 'ak3-shs-ue1-sg-002-jenkins'
+        - Key: OwnerID
+          Value: !Ref Owner
+        - Key: OwnerContact
+          Value: !Ref Contact
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref ProjectEnvironment
+        - Key: Team
+          Value: !Ref ProjectTeam
+
+Outputs:
+  DemoInstanceId:
+    Description: Instance Id 
+    Value: !Ref EC2Instance
+  EC2InstancePublicIp:
+    Description: EC2 instance public IP address
+    Value: !GetAtt EC2Instance.PublicIp
